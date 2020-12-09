@@ -1,0 +1,109 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: A template for photo album app
+Resources:
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties: 
+      BucketName: proj4-email-receptions
+      VersioningConfiguration: 
+        Status: Enabled
+      PublicAccessBlockConfiguration: 
+        BlockPublicAcls: FALSE
+        BlockPublicPolicy: FALSE
+        IgnorePublicAcls: FALSE
+        RestrictPublicBuckets: FALSE
+
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties: 
+      Bucket: proj4-email-receptions
+      PolicyDocument: 
+        Version: '2012-10-17'
+        Statement:
+          -
+            Sid: AllowSESPuts
+            Effect: Allow
+            Principal:
+              Service: ses.amazonaws.com
+            Action: s3:PutObject
+            Resource: 
+              Fn::Join: 
+              - ""
+              - 
+                - "arn:aws:s3:::"
+                - 
+                  Ref: S3Bucket
+                - "/*"
+            Condition:
+              StringEquals:
+                aws:Referer: '178190676612'
+
+  AmazonSageMakerExecutionRole20200504T172824:
+    Type: "AWS::IAM::Role"
+    Properties:
+      Description: "SageMaker execution role created from the SageMaker AWS Management Console."
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: "sagemaker.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Path: "/service-role/"
+      MaxSessionDuration: 3600
+      RoleName: AmazonSageMakerExecutionRole20200504T172824
+
+  smsspamclassifiermxnet:
+    Type: AWS::SageMaker::Model
+    Properties: 
+      ExecutionRoleArn: !GetAtt AmazonSageMakerExecutionRole20200504T172824.Arn
+      ModelName: sms-spam-classifier-mxnet-2020-05-05-15-18-31-035
+      PrimaryContainer: 
+          Image: 520713654638.dkr.ecr.us-east-1.amazonaws.com/sagemaker-mxnet:1.2-cpu-py3
+          Mode: SingleModel
+      
+
+  SagemakerEndpointConfig:
+    Type: AWS::SageMaker::EndpointConfig
+    Properties: 
+      EndpointConfigName: sms-spam-classifier-mxnet-2020-05-05-15-18-31-035
+      ProductionVariants: 
+        -
+          InitialInstanceCount: 1
+          InitialVariantWeight: 1.0
+          InstanceType: ml.m5.large
+          ModelName: !GetAtt smsspamclassifiermxnet.ModelName
+          VariantName: AllTraffic
+
+  NotebookInstance: 
+    Type: AWS::SageMaker::NotebookInstance
+    Properties: 
+      InstanceType: ml.t2.medium
+      NotebookInstanceName: spam-filtering-system
+      RoleArn: !GetAtt AmazonSageMakerExecutionRole20200504T172824.Arn
+
+  SpamEmailRoleGdnroxtb:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: "lambda.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Path: "/service-role/"
+      MaxSessionDuration: 3600
+      RoleName: SpamEmailRoleGdnroxtb
+      
+  spamemaillambda:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Code:
+        S3Bucket: cloudspamdetection
+        S3Key: Lambda.zip
+      FunctionName: "spam-email"
+      Handler: spam-email.lambda_handler
+      Role: !GetAtt SpamEmailRoleGdnroxtb.Arn
+      Runtime: python3.8    
